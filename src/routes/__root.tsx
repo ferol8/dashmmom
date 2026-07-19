@@ -81,10 +81,14 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { title: "@mueblemom · Dashboard de contenido" },
       { name: "description", content: "Dashboard privado de análisis de contenido de Instagram para @mueblemom." },
       { name: "robots", content: "noindex, nofollow" },
-      { property: "og:title", content: "@mueblemom · Dashboard" },
-      { property: "og:description", content: "Análisis de contenido para @mueblemom." },
+      { property: "og:title", content: "@mueblemom · Dashboard de contenido" },
+      { property: "og:description", content: "Dashboard privado de análisis de contenido de Instagram para @mueblemom." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:title", content: "@mueblemom · Dashboard de contenido" },
+      { name: "twitter:description", content: "Dashboard privado de análisis de contenido de Instagram para @mueblemom." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/5a7dea81-09f2-4443-979a-0787190e00ac/id-preview-8a30dc81--ac9f0af9-dac1-4536-94c6-5f8999720a41.lovable.app-1784494346900.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/5a7dea81-09f2-4443-979a-0787190e00ac/id-preview-8a30dc81--ac9f0af9-dac1-4536-94c6-5f8999720a41.lovable.app-1784494346900.png" },
     ],
     links: [
       {

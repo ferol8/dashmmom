@@ -63,10 +63,10 @@ function Dashboard() {
             <h1 className="font-serif text-2xl leading-none">@mueblemom</h1>
             <div className="flex items-center gap-4 mt-1.5 text-xs text-muted-foreground flex-wrap">
               <span>{formatNumber(snap?.followers_count)} seguidores</span>
-              <span>{snap?.posts_count ?? 0} posts</span>
-              <HealthBadge status={health?.status} label={health?.message} />
-              {lastRefresh ? (
-                <span>Actualizado: {new Date(lastRefresh).toLocaleString("es-MX")}</span>
+              <span>{snap?.media_count ?? 0} posts</span>
+              <HealthBadge status={health?.status} />
+              {lastRefresh?.finished_at ? (
+                <span>Actualizado: {new Date(lastRefresh.finished_at).toLocaleString("es-MX")}</span>
               ) : (
                 <span>Sin datos aún</span>
               )}

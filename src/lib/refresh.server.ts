@@ -38,13 +38,13 @@ export async function resolveAccountId(
   const res = await zernio.listAccounts();
   const accounts = unwrapList<Record<string, unknown>>(res);
   if (accounts.length === 0) {
-    throw new Error("No hay cuentas de Instagram conectadas en Zernio");
+    throw new Error("No hay cuentas de Instagram conectadas");
   }
   const first = accounts[0]!;
   const accountId =
     pickStr(first, "_id", "id", "accountId") ??
     (() => {
-      throw new Error("No pude leer el _id de la cuenta desde Zernio");
+      throw new Error("No pude leer el _id de la cuenta");
     })();
   await sb.from("meta").upsert(
     { user_id: userId, key: "zernio_account_id", value: accountId },

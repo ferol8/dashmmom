@@ -51,4 +51,3 @@ export function TabFrecuencia() {
     </div>
   );
 }
-*** End Patch

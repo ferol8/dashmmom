@@ -94,4 +94,3 @@ export function TabTendencia() {
     </div>
   );
 }
-*** End Patch

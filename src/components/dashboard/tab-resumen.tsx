@@ -40,4 +40,3 @@ export function TabResumen() {
     </div>
   );
 }
-*** End Patch

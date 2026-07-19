@@ -79,4 +79,3 @@ export function TabSchedule() {
     </Card>
   );
 }
-*** End Patch

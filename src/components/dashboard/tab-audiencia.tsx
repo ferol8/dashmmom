@@ -36,4 +36,3 @@ export function TabAudiencia() {
     </div>
   );
 }
-*** End Patch

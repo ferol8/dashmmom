@@ -70,7 +70,7 @@ export function TabIdeas() {
       ) : (
         <div className="grid md:grid-cols-2 gap-4">
           {BUCKETS.map((b) => {
-            const items = ideas.filter((i) => i.bucket === b.key);
+            const items = ideas.filter((i) => i.source_bucket === b.key);
             return (
               <Card key={b.key} className="p-5">
                 <div className="flex items-center justify-between mb-3">
@@ -92,7 +92,7 @@ export function TabIdeas() {
                     {items.map((i) => (
                       <li key={i.id} className="text-sm border-l-2 border-primary/30 pl-3 group">
                         <div className="flex justify-between gap-2 items-start">
-                          <div className="font-medium">{i.title}</div>
+                          <div className="font-medium">{i.angle ?? "(sin título)"}</div>
                           <button
                             onClick={() => discard.mutate(i.id)}
                             className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive"
@@ -104,16 +104,19 @@ export function TabIdeas() {
                         {i.rationale ? (
                           <div className="text-xs text-muted-foreground mt-1">{i.rationale}</div>
                         ) : null}
-                        {i.hook ? (
-                          <div className="text-xs mt-1 italic">"{i.hook}"</div>
+                        {i.suggested_angle ? (
+                          <div className="text-xs mt-1 italic">"{i.suggested_angle}"</div>
                         ) : null}
-                        {i.tags && i.tags.length > 0 ? (
+                        {i.format ? (
                           <div className="flex gap-1 mt-1.5 flex-wrap">
-                            {i.tags.slice(0, 3).map((t) => (
-                              <Badge key={t} variant="secondary" className="text-[10px]">
-                                {t}
-                              </Badge>
-                            ))}
+                            <Badge variant="secondary" className="text-[10px]">
+                              {i.format}
+                            </Badge>
+                          </div>
+                        ) : null}
+                        {i.why_good_idea ? (
+                          <div className="text-xs text-muted-foreground/80 mt-1">
+                            <span className="font-medium">Por qué: </span>{i.why_good_idea}
                           </div>
                         ) : null}
                       </li>

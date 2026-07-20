@@ -21,7 +21,6 @@ export const Route = createFileRoute("/auth")({
 
 function AuthPage() {
   const navigate = useNavigate();
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -36,18 +35,8 @@ function AuthPage() {
     e.preventDefault();
     setLoading(true);
     try {
-      if (mode === "signup") {
-        const { error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: { emailRedirectTo: `${window.location.origin}/dashboard` },
-        });
-        if (error) throw error;
-        toast.success("Cuenta creada. Entrando…");
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-      }
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
       navigate({ to: "/dashboard" });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Error de autenticación");
@@ -91,21 +80,12 @@ function AuthPage() {
               onChange={(e) => setPassword(e.target.value)}
               required
               minLength={6}
-              autoComplete={mode === "signup" ? "new-password" : "current-password"}
+              autoComplete="current-password"
             />
           </div>
           <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? "…" : mode === "signup" ? "Crear cuenta" : "Entrar"}
+            {loading ? "…" : "Entrar"}
           </Button>
-          <button
-            type="button"
-            className="text-sm text-muted-foreground w-full text-center hover:text-foreground"
-            onClick={() => setMode(mode === "signup" ? "signin" : "signup")}
-          >
-            {mode === "signup"
-              ? "Ya tengo cuenta — entrar"
-              : "Primera vez — crear cuenta"}
-          </button>
         </form>
       </Card>
     </div>

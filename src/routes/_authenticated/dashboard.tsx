@@ -16,7 +16,7 @@ import { TabFrecuencia } from "@/components/dashboard/tab-frecuencia";
 import { TabIdeas } from "@/components/dashboard/tab-ideas";
 import { RefreshCw, LogOut } from "lucide-react";
 import { toast } from "sonner";
-import perfilAsset from "@/assets/mueblemom-perfil.jpg.asset.json";
+const perfilAsset = { url: "https://mueblemom.com/wp-content/uploads/2026/07/1784556013-23a946b107e236e616e659b81a3d0c02.jpg" };
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({

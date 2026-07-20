@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
-import perfilAsset from "@/assets/mueblemom-perfil.jpg.asset.json";
+const perfilAsset = { url: "https://mueblemom.com/wp-content/uploads/2026/07/1784556013-23a946b107e236e616e659b81a3d0c02.jpg" };
 
 export const Route = createFileRoute("/auth")({
   head: () => ({

@@ -95,7 +95,6 @@ function Dashboard() {
             <TabsTrigger value="posts">Posts</TabsTrigger>
             <TabsTrigger value="schedule">Mejor hora</TabsTrigger>
             <TabsTrigger value="frecuencia">Frecuencia</TabsTrigger>
-            <TabsTrigger value="ideas">Ideas IA</TabsTrigger>
           </TabsList>
           <TabsContent value="resumen"><TabResumen /></TabsContent>
           <TabsContent value="tendencia"><TabTendencia /></TabsContent>
@@ -103,7 +102,6 @@ function Dashboard() {
           <TabsContent value="posts"><TabPosts /></TabsContent>
           <TabsContent value="schedule"><TabSchedule /></TabsContent>
           <TabsContent value="frecuencia"><TabFrecuencia /></TabsContent>
-          <TabsContent value="ideas"><TabIdeas /></TabsContent>
         </Tabs>
       </main>
     </div>

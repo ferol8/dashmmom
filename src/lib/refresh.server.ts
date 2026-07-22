@@ -469,7 +469,27 @@ export async function runFullRefresh(sb: SB, userId: string): Promise<RefreshSte
     .single();
   const logId = logInsert.data?.id as string | undefined;
 
-  const { accountId, account } = await resolveAccountId(sb, userId);
+  const stored = await getStoredAccountId(sb, userId);
+  let accountId: string;
+  let account: Record<string, unknown> = {};
+  if (stored) {
+    accountId = stored;
+    // Try to enrich with live account data, but don't fail refresh if listAccounts errors.
+    try {
+      const res = await zernio.listAccounts();
+      const accounts = unwrapList<Record<string, unknown>>(res);
+      const match = accounts.find(
+        (a) => pickStr(a, "_id", "id", "accountId") === accountId,
+      );
+      if (match) account = match;
+    } catch (err) {
+      console.warn("[refresh] listAccounts failed, using stored id only:", err);
+    }
+  } else {
+    const resolved = await resolveAccountId(sb, userId);
+    accountId = resolved.accountId;
+    account = resolved.account;
+  }
 
   await step("snapshot", () => upsertSnapshot(sb, userId, accountId, account));
   await step("health", () => refreshHealth(sb, userId, accountId));

@@ -1,0 +1,160 @@
+{
+  "version": 1,
+  "sdk_version": "0.26.2",
+  "path": "/mcp",
+  "auth": {
+    "type": "oauth",
+    "issuer": "https://fesjphbbssjttzljxmye.supabase.co/auth/v1",
+    "accepted_audiences": [
+      "authenticated"
+    ]
+  },
+  "mcp": {
+    "server": {
+      "name": "insightful-creator",
+      "version": "0.1.0",
+      "title": "Insightful Creator"
+    },
+    "tools": [
+      {
+        "name": "get_account_overview",
+        "title": "Resumen de la cuenta",
+        "description": "Devuelve el snapshot de la cuenta de Instagram (seguidores, posts), su estado de salud, las métricas de los últimos 30 días y la fecha de la última actualización de datos.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {}
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_daily_metrics",
+        "title": "Métricas diarias",
+        "description": "Serie diaria de alcance, vistas, likes, comentarios, guardados, compartidos e interacciones, junto con el histórico de seguidores.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "days": {
+              "default": 90,
+              "description": "Cuántos días hacia atrás incluir (por defecto 90).",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 365
+            }
+          }
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_top_posts",
+        "title": "Mejores posts",
+        "description": "Lista los posts de Instagram ordenados por fecha de publicación o por interacciones, con sus métricas principales.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "limit": {
+              "default": 20,
+              "description": "Cuántos posts devolver.",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "sort_by": {
+              "default": "interactions",
+              "description": "Criterio de orden.",
+              "type": "string",
+              "enum": [
+                "recent",
+                "interactions",
+                "reach",
+                "likes"
+              ]
+            }
+          }
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_post_comments",
+        "title": "Comentarios de un post",
+        "description": "Devuelve los comentarios guardados de un post concreto. Usa get_top_posts para obtener el post_id.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "post_id": {
+              "type": "string",
+              "minLength": 1,
+              "description": "ID del post tal como aparece en get_top_posts."
+            },
+            "limit": {
+              "default": 100,
+              "description": "Máximo de comentarios.",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          "required": [
+            "post_id"
+          ]
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_audience_demographics",
+        "title": "Demografía de la audiencia",
+        "description": "Distribución de la audiencia por edad, género, país y ciudad.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {}
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_posting_schedule",
+        "title": "Mejor hora y frecuencia",
+        "description": "Devuelve el mapa de mejores horas para publicar, el rendimiento por frecuencia de publicación semanal y la curva de decaimiento del contenido.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {}
+        },
+        "outputSchema": null
+      }
+    ]
+  }
+}

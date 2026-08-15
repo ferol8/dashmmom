@@ -80,7 +80,6 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "@mueblemom · Dashboard de contenido" },
       { name: "description", content: "Dashboard privado de análisis de contenido de Instagram para @mueblemom." },
-      { name: "robots", content: "noindex, nofollow" },
       { property: "og:title", content: "@mueblemom · Dashboard de contenido" },
       { property: "og:description", content: "Dashboard privado de análisis de contenido de Instagram para @mueblemom." },
       { property: "og:type", content: "website" },

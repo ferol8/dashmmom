@@ -308,6 +308,33 @@ export type Database = {
         }
         Relationships: []
       }
+      dashboard_preferences: {
+        Row: {
+          created_at: string
+          currency: string
+          default_period: number
+          timezone: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          currency?: string
+          default_period?: number
+          timezone?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          currency?: string
+          default_period?: number
+          timezone?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       demographics_age: {
         Row: {
           bucket: string
@@ -705,6 +732,42 @@ export type Database = {
           started_at?: string
           status?: string | null
           steps?: Json | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      revenue_entries: {
+        Row: {
+          amount: number
+          concept: string
+          created_at: string
+          entry_date: string
+          id: string
+          notes: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount?: number
+          concept: string
+          created_at?: string
+          entry_date?: string
+          id?: string
+          notes?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          concept?: string
+          created_at?: string
+          entry_date?: string
+          id?: string
+          notes?: string | null
+          status?: string
+          updated_at?: string
           user_id?: string
         }
         Relationships: []

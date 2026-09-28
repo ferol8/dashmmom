@@ -36,6 +36,52 @@ export const getBootstrap = createServerFn({ method: "GET" })
     };
   });
 
+const periodSchema = z.object({ days: z.union([z.literal(7), z.literal(28), z.literal(90)]) });
+
+export const getDashboardOverview = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) => periodSchema.parse(d))
+  .handler(async ({ context, data }) => {
+    const { supabase, userId } = context;
+    const currentStart = new Date();
+    currentStart.setUTCHours(0, 0, 0, 0);
+    currentStart.setUTCDate(currentStart.getUTCDate() - data.days + 1);
+    const previousStart = new Date(currentStart);
+    previousStart.setUTCDate(previousStart.getUTCDate() - data.days);
+    const [metricsResult, postsResult] = await Promise.all([
+      supabase
+        .from("daily_metrics")
+        .select("date, reach, views, likes, comments_count, shares, interactions")
+        .eq("user_id", userId)
+        .gte("date", previousStart.toISOString().slice(0, 10))
+        .order("date"),
+      supabase
+        .from("posts")
+        .select("id, post_type, caption, permalink, thumbnail_url, media_url, published_at, views, reach, interactions, engagement_rate, likes, comments_count, shares")
+        .eq("user_id", userId)
+        .order("interactions", { ascending: false, nullsFirst: false })
+        .limit(5),
+    ]);
+    const rows = metricsResult.data ?? [];
+    const current = rows.filter((row) => row.date >= currentStart.toISOString().slice(0, 10));
+    const previous = rows.filter((row) => row.date < currentStart.toISOString().slice(0, 10));
+    const sum = (items: typeof rows, key: keyof (typeof rows)[number]) =>
+      items.reduce((total, row) => total + Number(row[key] ?? 0), 0);
+    const totals = {
+      views: sum(current, "views"), likes: sum(current, "likes"),
+      comments_count: sum(current, "comments_count"), shares: sum(current, "shares"),
+      reach: sum(current, "reach"), interactions: sum(current, "interactions"),
+    };
+    const previousTotals = {
+      views: sum(previous, "views"), likes: sum(previous, "likes"),
+      comments_count: sum(previous, "comments_count"), shares: sum(previous, "shares"),
+      reach: sum(previous, "reach"), interactions: sum(previous, "interactions"),
+    };
+    const engagement = totals.reach > 0 ? (totals.interactions / totals.reach) * 100 : 0;
+    const previousEngagement = previousTotals.reach > 0 ? (previousTotals.interactions / previousTotals.reach) * 100 : 0;
+    return { daily: current, totals, previousTotals, engagement, previousEngagement, featured: postsResult.data ?? [] };
+  });
+
 // ---------- Trend tab ----------
 export const getTrendData = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
@@ -90,6 +136,102 @@ export const getPostsData = createServerFn({ method: "GET" })
       .order("published_at", { ascending: false, nullsFirst: false })
       .limit(200);
     return { posts: data ?? [] };
+  });
+
+// ---------- Revenue ----------
+export const getRevenueEntries = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { data, error } = await context.supabase
+      .from("revenue_entries")
+      .select("*")
+      .eq("user_id", context.userId)
+      .order("entry_date", { ascending: false });
+    if (error) throw error;
+    return { entries: data ?? [] };
+  });
+
+const revenueSchema = z.object({
+  id: z.string().uuid().optional(),
+  concept: z.string().trim().min(1).max(120),
+  entryDate: z.string().date(),
+  amount: z.number().min(0).max(999999999),
+  status: z.enum(["pending", "paid"]),
+  notes: z.string().max(500).optional(),
+});
+
+export const saveRevenueEntry = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) => revenueSchema.parse(d))
+  .handler(async ({ context, data }) => {
+    const payload = {
+      user_id: context.userId,
+      concept: data.concept,
+      entry_date: data.entryDate,
+      amount: data.amount,
+      status: data.status,
+      notes: data.notes || null,
+    };
+    const query = data.id
+      ? context.supabase.from("revenue_entries").update(payload).eq("id", data.id).eq("user_id", context.userId)
+      : context.supabase.from("revenue_entries").insert(payload);
+    const { error } = await query;
+    if (error) throw error;
+    return { ok: true };
+  });
+
+export const deleteRevenueEntry = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) => z.object({ id: z.string().uuid() }).parse(d))
+  .handler(async ({ context, data }) => {
+    const { error } = await context.supabase.from("revenue_entries").delete().eq("id", data.id).eq("user_id", context.userId);
+    if (error) throw error;
+    return { ok: true };
+  });
+
+// ---------- Preferences ----------
+export const getDashboardPreferences = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { data } = await context.supabase.from("dashboard_preferences").select("*").eq("user_id", context.userId).maybeSingle();
+    return { preferences: data ?? { timezone: "America/Mexico_City", default_period: 28, currency: "MXN" } };
+  });
+
+export const saveDashboardPreferences = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) => z.object({
+    timezone: z.string().min(1).max(80),
+    defaultPeriod: z.union([z.literal(7), z.literal(28), z.literal(90)]),
+    currency: z.enum(["MXN", "USD", "EUR"]),
+  }).parse(d))
+  .handler(async ({ context, data }) => {
+    const { error } = await context.supabase.from("dashboard_preferences").upsert({
+      user_id: context.userId,
+      timezone: data.timezone,
+      default_period: data.defaultPeriod,
+      currency: data.currency,
+    });
+    if (error) throw error;
+    return { ok: true };
+  });
+
+export const getReportData = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) => periodSchema.parse(d))
+  .handler(async ({ context, data }) => {
+    const since = new Date();
+    since.setUTCDate(since.getUTCDate() - data.days + 1);
+    const date = since.toISOString().slice(0, 10);
+    const [daily, posts, age, gender, country, city, revenue] = await Promise.all([
+      context.supabase.from("daily_metrics").select("date, reach, views, likes, comments_count, saves, shares, interactions, engaged, posts_count").eq("user_id", context.userId).gte("date", date).order("date"),
+      context.supabase.from("posts").select("id, post_type, caption, permalink, published_at, views, reach, likes, comments_count, shares, saves, interactions, engagement_rate").eq("user_id", context.userId).gte("published_at", since.toISOString()).order("published_at", { ascending: false }),
+      context.supabase.from("demographics_age").select("bucket, percentage, count").eq("user_id", context.userId),
+      context.supabase.from("demographics_gender").select("bucket, percentage, count").eq("user_id", context.userId),
+      context.supabase.from("demographics_country").select("bucket, percentage, count").eq("user_id", context.userId),
+      context.supabase.from("demographics_city").select("bucket, percentage, count").eq("user_id", context.userId),
+      context.supabase.from("revenue_entries").select("concept, entry_date, amount, status, notes").eq("user_id", context.userId).gte("entry_date", date).order("entry_date", { ascending: false }),
+    ]);
+    return { daily: daily.data ?? [], posts: posts.data ?? [], audience: [...(age.data ?? []).map((r) => ({ category: "Edad", ...r })), ...(gender.data ?? []).map((r) => ({ category: "Género", ...r })), ...(country.data ?? []).map((r) => ({ category: "País", ...r })), ...(city.data ?? []).map((r) => ({ category: "Ciudad", ...r }))], revenue: revenue.data ?? [] };
   });
 
 export const getPostComments = createServerFn({ method: "GET" })

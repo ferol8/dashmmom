@@ -8,3 +8,6 @@
 > Commits you push to the connected branch sync back to Lovable and show up in
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
+
+- Keep dashboard sections as one authenticated workspace with state-based navigation; this preserves fast cross-section workflows without route reloads.
+- Store manual revenue in `revenue_entries` and user display defaults in `dashboard_preferences`; external analytics remains read-only.

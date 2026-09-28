@@ -3,20 +3,33 @@ import { useServerFn } from "@tanstack/react-start";
 import { getPostsData, getPostComments } from "@/lib/dashboard.functions";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { formatNumber } from "./health-badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export function TabPosts() {
   const fn = useServerFn(getPostsData);
   const { data, isLoading } = useQuery({ queryKey: ["posts"], queryFn: () => fn() });
   const [openPostId, setOpenPostId] = useState<string | null>(null);
+  const [type, setType] = useState("all");
+  const [sort, setSort] = useState("performance");
   if (isLoading) return <div className="text-sm text-muted-foreground">Cargando…</div>;
-  const posts = data?.posts ?? [];
+  const posts = useMemo(() => {
+    const source = data?.posts ?? [];
+    const filtered = type === "all" ? source : source.filter((post) => post.post_type === type);
+    return [...filtered].sort((a, b) => sort === "recent"
+      ? new Date(b.published_at ?? 0).getTime() - new Date(a.published_at ?? 0).getTime()
+      : Number(b.interactions ?? 0) - Number(a.interactions ?? 0));
+  }, [data?.posts, sort, type]);
   if (posts.length === 0) {
     return <Card className="p-8 text-center text-muted-foreground">Aún no hay posts sincronizados.</Card>;
   }
   return (
     <>
+      <div className="mb-4 flex flex-wrap gap-2">
+        <Select value={type} onValueChange={setType}><SelectTrigger className="w-44"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todo el contenido</SelectItem><SelectItem value="IMAGE">Imágenes</SelectItem><SelectItem value="VIDEO">Videos</SelectItem><SelectItem value="CAROUSEL_ALBUM">Carruseles</SelectItem></SelectContent></Select>
+        <Select value={sort} onValueChange={setSort}><SelectTrigger className="w-44"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="performance">Mejor rendimiento</SelectItem><SelectItem value="recent">Más recientes</SelectItem></SelectContent></Select>
+      </div>
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
         {posts.map((p) => (
           <button
@@ -56,7 +69,10 @@ function PostDialog({ postId, onClose }: { postId: string | null; onClose: () =>
   const fn = useServerFn(getPostComments);
   const { data, isLoading } = useQuery({
     queryKey: ["post-comments", postId],
-    queryFn: () => fn({ data: { postId: postId! } }),
+    queryFn: () => {
+      if (!postId) return Promise.resolve({ comments: [] });
+      return fn({ data: { postId } });
+    },
     enabled: !!postId,
   });
   return (

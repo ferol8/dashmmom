@@ -27,6 +27,17 @@ const oauth = () =>
 
 export const Route = createFileRoute("/oauth/consent")({
   ssr: false,
+  head: () => ({
+    meta: [
+      { title: "Autorizar conexión · @mueblemom" },
+      { name: "description", content: "Autoriza de forma segura el acceso de un agente a tus analíticas." },
+      { property: "og:title", content: "Autorizar conexión · @mueblemom" },
+      { property: "og:description", content: "Autoriza de forma segura el acceso de un agente a tus analíticas." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
+      { name: "robots", content: "noindex, nofollow" },
+    ],
+  }),
   validateSearch: (s: Record<string, unknown>) => ({
     authorization_id: typeof s.authorization_id === "string" ? s.authorization_id : "",
   }),

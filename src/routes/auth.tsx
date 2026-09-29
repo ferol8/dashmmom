@@ -19,6 +19,10 @@ export const Route = createFileRoute("/auth")({
     meta: [
       { title: "Ingresar · @mueblemom" },
       { name: "description", content: "Acceso privado al dashboard." },
+      { property: "og:title", content: "Ingresar · @mueblemom" },
+      { property: "og:description", content: "Acceso privado al panel de analíticas de @mueblemom." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
       { name: "robots", content: "noindex, nofollow" },
     ],
   }),

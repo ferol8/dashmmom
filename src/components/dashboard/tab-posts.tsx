@@ -13,7 +13,6 @@ export function TabPosts() {
   const [openPostId, setOpenPostId] = useState<string | null>(null);
   const [type, setType] = useState("all");
   const [sort, setSort] = useState("performance");
-  if (isLoading) return <div className="text-sm text-muted-foreground">Cargando…</div>;
   const posts = useMemo(() => {
     const source = data?.posts ?? [];
     const filtered = type === "all" ? source : source.filter((post) => post.post_type === type);
@@ -21,6 +20,7 @@ export function TabPosts() {
       ? new Date(b.published_at ?? 0).getTime() - new Date(a.published_at ?? 0).getTime()
       : Number(b.interactions ?? 0) - Number(a.interactions ?? 0));
   }, [data?.posts, sort, type]);
+  if (isLoading) return <div className="text-sm text-muted-foreground">Cargando…</div>;
   if (posts.length === 0) {
     return <Card className="p-8 text-center text-muted-foreground">Aún no hay posts sincronizados.</Card>;
   }

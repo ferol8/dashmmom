@@ -65,300 +65,242 @@ export async function getStoredAccountId(sb: SB, userId: string): Promise<string
   return typeof val === "string" ? val : null;
 }
 
+// ---------- helpers ----------
+type Obj = Record<string, unknown>;
+const asObj = (v: unknown): Obj => (v && typeof v === "object" && !Array.isArray(v) ? (v as Obj) : {});
+const asArr = (v: unknown): Obj[] => (Array.isArray(v) ? (v as Obj[]) : []);
+async function must(p: PromiseLike<{ error: { message: string } | null }>, label: string) {
+  const { error } = await p;
+  if (error) throw new Error(`${label}: ${error.message}`);
+}
+const now = () => new Date().toISOString();
+
 // ---------- Snapshot / health / insights ----------
-async function upsertSnapshot(
-  sb: SB,
-  userId: string,
-  accountId: string,
-  account: Record<string, unknown>,
-) {
-  await sb.from("account_snapshot").upsert({
+async function upsertSnapshot(sb: SB, userId: string, accountId: string, account: Obj) {
+  const profile = asObj(asObj(account.metadata).profileData);
+  const extra = asObj(profile.extraData);
+  const followers = pickNum(account, "followersCount") ?? pickNum(profile, "followersCount");
+  await must(sb.from("account_snapshot").upsert({
     user_id: userId,
     account_id: accountId,
-    username: pickStr(account, "username", "handle"),
-    display_name: pickStr(account, "displayName", "name", "fullName"),
-    profile_picture_url: pickStr(account, "profilePictureUrl", "profile_picture_url", "avatarUrl", "avatar"),
-    followers_count: pickNum(account, "followersCount", "followers_count", "followers"),
-    following_count: pickNum(account, "followingCount", "following_count", "following"),
-    media_count: pickNum(account, "mediaCount", "media_count", "posts"),
-    biography: pickStr(account, "biography", "bio"),
+    username: pickStr(account, "username") ?? pickStr(profile, "username"),
+    display_name: pickStr(account, "displayName") ?? pickStr(profile, "displayName"),
+    profile_picture_url: pickStr(account, "profilePicture") ?? pickStr(profile, "profilePicture"),
+    followers_count: followers,
+    following_count: pickNum(extra, "followsCount"),
+    media_count: pickNum(extra, "mediaCount"),
+    biography: pickStr(profile, "bio"),
     raw: account,
-    updated_at: new Date().toISOString(),
-  });
+    updated_at: now(),
+  }), "snapshot");
+  if (followers !== null) {
+    await must(sb.from("follower_history").upsert({
+      user_id: userId,
+      date: now().slice(0, 10),
+      followers_count: followers,
+      following_count: pickNum(extra, "followsCount"),
+      updated_at: now(),
+    }, { onConflict: "user_id,date" }), "follower_history");
+  }
 }
 
 async function refreshHealth(sb: SB, userId: string, accountId: string) {
-  const res = await zernio.getAccountHealth(accountId);
-  const obj = unwrapObj<Record<string, unknown>>(res);
-  await sb.from("account_health").upsert({
+  const obj = unwrapObj<Obj>(await zernio.getAccountHealth(accountId));
+  await must(sb.from("account_health").upsert({
     user_id: userId,
-    status: pickStr(obj, "status", "health", "level") ?? "unknown",
+    status: pickStr(obj, "status") ?? "unknown",
     score: pickNum(obj, "score"),
     issues: (obj.issues as unknown) ?? null,
     raw: obj,
-    updated_at: new Date().toISOString(),
-  });
+    updated_at: now(),
+  }), "health");
 }
 
 async function refreshInsights(sb: SB, userId: string, accountId: string) {
-  const res = await zernio.getAccountInsights(accountId);
-  const obj = unwrapObj<Record<string, unknown>>(res);
-  const totals = (obj.totals as Record<string, unknown> | undefined) ?? obj;
-  await sb.from("account_insights_30d").upsert({
+  const obj = asObj(await zernio.getAccountInsights(accountId));
+  const m = asObj(obj.metrics);
+  const t = (k: string) => pickNum(asObj(m[k]), "total");
+  const reach = t("reach");
+  const interactions = t("total_interactions");
+  await must(sb.from("account_insights_30d").upsert({
     user_id: userId,
-    reach: pickNum(totals, "reach", "totalReach"),
-    views: pickNum(totals, "views", "impressions"),
-    engaged: pickNum(totals, "engaged", "engagedAccounts"),
-    interactions: pickNum(totals, "interactions", "totalInteractions"),
-    likes: pickNum(totals, "likes"),
-    comments_count: pickNum(totals, "comments"),
-    saves: pickNum(totals, "saves", "saved"),
-    shares: pickNum(totals, "shares", "shared"),
-    engagement_rate: pickNum(totals, "engagementRate", "engagement_rate", "er"),
+    reach,
+    views: t("views"),
+    engaged: t("accounts_engaged"),
+    interactions,
+    likes: t("likes"),
+    comments_count: t("comments"),
+    saves: t("saves"),
+    shares: t("shares"),
+    engagement_rate: reach && interactions !== null ? (interactions / reach) * 100 : null,
     raw: obj,
-    updated_at: new Date().toISOString(),
-  });
+    updated_at: now(),
+  }), "insights");
 }
 
 async function refreshDailyMetrics(sb: SB, userId: string, accountId: string) {
-  const res = await zernio.getDailyMetrics(accountId, 180);
-  const rows = unwrapList<Record<string, unknown>>(res);
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - 180);
-  const upserts = rows
-    .map((r) => {
-      const dateRaw = pickStr(r, "date", "day");
-      if (!dateRaw) return null;
-      const d = new Date(dateRaw);
-      if (Number.isNaN(d.getTime())) return null;
-      return {
-        user_id: userId,
-        date: d.toISOString().slice(0, 10),
-        reach: pickNum(r, "reach"),
-        views: pickNum(r, "views", "impressions"),
-        engaged: pickNum(r, "engaged", "engagedAccounts"),
-        interactions: pickNum(r, "interactions"),
-        likes: pickNum(r, "likes"),
-        comments_count: pickNum(r, "comments"),
-        saves: pickNum(r, "saves"),
-        shares: pickNum(r, "shares"),
-        posts_count: pickNum(r, "postsCount", "posts"),
-        raw: r,
-        updated_at: new Date().toISOString(),
-      };
-    })
-    .filter(Boolean) as Array<Record<string, unknown>>;
-  if (upserts.length > 0) {
-    await sb.from("daily_metrics").upsert(upserts, { onConflict: "user_id,date" });
-  }
-  // Retention: 180 days
-  await sb
-    .from("daily_metrics")
-    .delete()
-    .eq("user_id", userId)
-    .lt("date", cutoff.toISOString().slice(0, 10));
+  const res = asObj(await zernio.getDailyMetrics(accountId, 180));
+  const rows = asArr(res.dailyData);
+  const upserts = rows.flatMap((r) => {
+    const date = pickStr(r, "date");
+    if (!date) return [];
+    const m = asObj(asObj(r.platformMetrics).instagram);
+    const mm = Object.keys(m).length ? m : asObj(r.metrics);
+    const likes = pickNum(mm, "likes") ?? 0, comments = pickNum(mm, "comments") ?? 0;
+    const shares = pickNum(mm, "shares") ?? 0, saves = pickNum(mm, "saves") ?? 0;
+    return [{
+      user_id: userId,
+      date: date.slice(0, 10),
+      reach: pickNum(mm, "reach"),
+      views: pickNum(mm, "views", "impressions"),
+      engaged: null,
+      interactions: likes + comments + shares + saves,
+      likes, comments_count: comments, saves, shares,
+      posts_count: pickNum(r, "postCount"),
+      raw: r,
+      updated_at: now(),
+    }];
+  });
+  if (upserts.length) await must(sb.from("daily_metrics").upsert(upserts, { onConflict: "user_id,date" }), "daily_metrics");
   return upserts.length;
 }
 
 async function refreshDemographics(sb: SB, userId: string, accountId: string) {
-  const res = await zernio.getDemographics(accountId);
-  const obj = unwrapObj<Record<string, unknown>>(res);
-
+  const obj = asObj(await zernio.getDemographics(accountId));
+  const demo = asObj(obj.demographics);
   async function writeDim(table: string, source: unknown) {
-    await sb.from(table).delete().eq("user_id", userId);
-    const rows = unwrapList<Record<string, unknown>>(source);
-    const upserts = rows
-      .map((r) => ({
-        user_id: userId,
-        bucket: pickStr(r, "bucket", "label", "name", "value", "key") ?? "",
-        percentage: pickNum(r, "percentage", "percent", "pct"),
-        count: pickNum(r, "count", "value"),
-        updated_at: new Date().toISOString(),
-      }))
-      .filter((r) => r.bucket !== "");
-    if (upserts.length > 0) {
-      await sb.from(table).upsert(upserts, { onConflict: "user_id,bucket" });
+    const rows = asArr(source);
+    const total = rows.reduce((s, r) => s + (pickNum(r, "value") ?? 0), 0);
+    const map = new Map<string, Obj>();
+    for (const r of rows) {
+      const bucket = pickStr(r, "dimension", "bucket", "label");
+      const count = pickNum(r, "value", "count");
+      if (!bucket) continue;
+      map.set(bucket, {
+        user_id: userId, bucket, count,
+        percentage: total && count !== null ? (count / total) * 100 : null,
+        updated_at: now(),
+      });
     }
+    await must(sb.from(table).delete().eq("user_id", userId), table);
+    if (map.size) await must(sb.from(table).upsert([...map.values()], { onConflict: "user_id,bucket" }), table);
   }
-
-  await writeDim("demographics_age", obj.age ?? obj.ageRanges ?? obj.ages);
-  await writeDim("demographics_gender", obj.gender ?? obj.genders);
-  await writeDim("demographics_country", obj.country ?? obj.countries ?? obj.topCountries);
-  await writeDim("demographics_city", obj.city ?? obj.cities ?? obj.topCities);
+  await writeDim("demographics_age", demo.age);
+  await writeDim("demographics_gender", demo.gender);
+  await writeDim("demographics_country", demo.country);
+  await writeDim("demographics_city", demo.city);
 }
 
 async function refreshFollowerHistory(sb: SB, userId: string, accountId: string) {
-  const res = await zernio.getFollowerHistory(accountId);
-  const rows = unwrapList<Record<string, unknown>>(res);
-  const upserts = rows
-    .map((r) => {
-      const dateRaw = pickStr(r, "date", "day");
-      if (!dateRaw) return null;
-      const d = new Date(dateRaw);
-      if (Number.isNaN(d.getTime())) return null;
-      return {
-        user_id: userId,
-        date: d.toISOString().slice(0, 10),
-        followers_count: pickNum(r, "followers", "followersCount", "count"),
-        following_count: pickNum(r, "following", "followingCount"),
-        updated_at: new Date().toISOString(),
-      };
-    })
-    .filter(Boolean) as Array<Record<string, unknown>>;
-  if (upserts.length > 0) {
-    await sb.from("follower_history").upsert(upserts, { onConflict: "user_id,date" });
-  }
-  return upserts.length;
+  // Zernio returns only period totals; daily points are captured by upsertSnapshot.
+  const obj = asObj(await zernio.getFollowerHistory(accountId));
+  const fc = pickNum(asObj(asObj(obj.metrics).follower_count), "total");
+  if (fc === null) return 0;
+  await must(sb.from("follower_history").upsert(
+    { user_id: userId, date: now().slice(0, 10), followers_count: fc, updated_at: now() },
+    { onConflict: "user_id,date" },
+  ), "follower_history");
+  return 1;
 }
 
 async function refreshBestTime(sb: SB, userId: string, accountId: string) {
-  const res = await zernio.getBestTime(accountId);
-  const rows = unwrapList<Record<string, unknown>>(res);
-  await sb.from("best_time").delete().eq("user_id", userId);
-  const upserts = rows
-    .map((r) => {
-      const dow = pickNum(r, "dayOfWeek", "day_of_week", "dow", "day");
-      const hour = pickNum(r, "hour", "hourUtc", "hourOfDay");
-      if (dow === null || hour === null) return null;
-      return {
-        user_id: userId,
-        day_of_week: dow,
-        hour,
-        score: pickNum(r, "score", "engagementScore"),
-        engagement: pickNum(r, "engagement", "avgEngagement"),
-        posts_count: pickNum(r, "postsCount", "posts", "count") ?? 0,
-        updated_at: new Date().toISOString(),
-      };
-    })
-    .filter(Boolean) as Array<Record<string, unknown>>;
-  if (upserts.length > 0) {
-    await sb.from("best_time").upsert(upserts, { onConflict: "user_id,day_of_week,hour" });
-  }
+  const rows = asArr(asObj(await zernio.getBestTime(accountId)).slots);
+  const upserts = rows.flatMap((r) => {
+    const dow = pickNum(r, "day_of_week"), hour = pickNum(r, "hour");
+    if (dow === null || hour === null) return [];
+    const eng = pickNum(r, "avg_engagement");
+    return [{ user_id: userId, day_of_week: dow, hour, score: eng, engagement: eng, posts_count: pickNum(r, "post_count") ?? 0, updated_at: now() }];
+  });
+  await must(sb.from("best_time").delete().eq("user_id", userId), "best_time");
+  if (upserts.length) await must(sb.from("best_time").upsert(upserts, { onConflict: "user_id,day_of_week,hour" }), "best_time");
+  return upserts.length;
 }
 
 async function refreshPostingFrequency(sb: SB, userId: string, accountId: string) {
-  const res = await zernio.getPostingFrequency(accountId);
-  const rows = unwrapList<Record<string, unknown>>(res);
-  await sb.from("posting_frequency").delete().eq("user_id", userId);
-  const upserts = rows
-    .map((r) => {
-      const ppw = pickNum(r, "postsPerWeek", "posts_per_week", "frequency", "cadence");
-      if (ppw === null) return null;
-      return {
-        user_id: userId,
-        posts_per_week: ppw,
-        avg_engagement: pickNum(r, "avgEngagement", "engagement", "engagementRate"),
-        weeks_count: pickNum(r, "weeksCount", "weeks", "count") ?? 0,
-        updated_at: new Date().toISOString(),
-      };
-    })
-    .filter(Boolean) as Array<Record<string, unknown>>;
-  if (upserts.length > 0) {
-    await sb.from("posting_frequency").upsert(upserts, { onConflict: "user_id,posts_per_week" });
+  const rows = asArr(asObj(await zernio.getPostingFrequency(accountId)).frequency);
+  const map = new Map<number, Obj>();
+  for (const r of rows) {
+    const ppw = pickNum(r, "posts_per_week");
+    if (ppw === null) continue;
+    map.set(ppw, { user_id: userId, posts_per_week: ppw, avg_engagement: pickNum(r, "avg_engagement_rate", "avg_engagement"), weeks_count: pickNum(r, "weeks_count") ?? 0, updated_at: now() });
   }
+  await must(sb.from("posting_frequency").delete().eq("user_id", userId), "posting_frequency");
+  if (map.size) await must(sb.from("posting_frequency").upsert([...map.values()], { onConflict: "user_id,posts_per_week" }), "posting_frequency");
+  return map.size;
 }
 
 async function refreshContentDecay(sb: SB, userId: string, accountId: string) {
-  const res = await zernio.getContentDecay(accountId);
-  const obj = unwrapObj<Record<string, unknown>>(res);
-  const rows = unwrapList<Record<string, unknown>>(obj.buckets ?? obj.data ?? res);
-  await sb.from("content_decay").delete().eq("user_id", userId);
+  const rows = asArr(asObj(await zernio.getContentDecay(accountId)).buckets);
   const upserts = rows.map((r, i) => ({
     user_id: userId,
-    bucket_order: pickNum(r, "order", "index", "bucketOrder") ?? i,
-    bucket_label: pickStr(r, "label", "bucket", "range"),
-    cumulative_pct: pickNum(r, "cumulativePct", "cumulative", "pct", "percentage"),
-    updated_at: new Date().toISOString(),
+    bucket_order: pickNum(r, "bucket_order") ?? i,
+    bucket_label: pickStr(r, "bucket_label"),
+    cumulative_pct: pickNum(r, "avg_pct_of_final"),
+    updated_at: now(),
   }));
-  if (upserts.length > 0) {
-    await sb.from("content_decay").upsert(upserts, { onConflict: "user_id,bucket_order" });
-  }
+  await must(sb.from("content_decay").delete().eq("user_id", userId), "content_decay");
+  if (upserts.length) await must(sb.from("content_decay").upsert(upserts, { onConflict: "user_id,bucket_order" }), "content_decay");
+  return upserts.length;
 }
 
-// ---------- Posts + comments (via inbox) ----------
-async function refreshInboxCommentsAndPosts(
-  sb: SB,
-  userId: string,
-  accountId: string,
-) {
-  const res = await zernio.listInboxComments(accountId, 500);
-  const rows = unwrapList<Record<string, unknown>>(res);
+// ---------- Posts (analytics) + comments ----------
+async function refreshInboxCommentsAndPosts(sb: SB, userId: string, accountId: string) {
+  const res = asObj(await zernio.listPosts(accountId, 100));
+  const posts = asArr(res.posts);
+  const postUpserts = posts.flatMap((p) => {
+    const plat = asArr(p.platforms).find((x) => pickStr(x, "accountId") === accountId) ?? asArr(p.platforms)[0] ?? {};
+    const id = pickStr(plat, "platformPostId") ?? pickStr(p, "_id");
+    if (!id) return [];
+    const a = asObj(plat.analytics ?? p.analytics);
+    const likes = pickNum(a, "likes") ?? 0, comments = pickNum(a, "comments") ?? 0;
+    const shares = pickNum(a, "shares") ?? 0, saves = pickNum(a, "saves") ?? 0;
+    const url = pickStr(plat, "platformPostUrl") ?? pickStr(p, "platformPostUrl");
+    const type = url?.includes("/reel/") ? "VIDEO" : asArr(p.mediaItems).length > 1 ? "CAROUSEL_ALBUM" : "IMAGE";
+    const media = asArr(p.mediaItems)[0] ?? {};
+    return [{
+      id, user_id: userId, post_type: type,
+      caption: pickStr(p, "content"),
+      permalink: url,
+      thumbnail_url: pickStr(p, "thumbnailUrl") ?? pickStr(media, "thumbnail", "url"),
+      media_url: pickStr(media, "url"),
+      published_at: pickStr(p, "publishedAt"),
+      likes, comments_count: comments, shares, saves,
+      views: pickNum(a, "views"), impressions: pickNum(a, "impressions"), reach: pickNum(a, "reach"),
+      interactions: likes + comments + shares + saves,
+      engagement_rate: pickNum(a, "engagementRate"),
+      raw: p, updated_at: now(),
+    }];
+  });
+  if (postUpserts.length) await must(sb.from("posts").upsert(postUpserts, { onConflict: "user_id,id" }), "posts");
 
-  const postsMap = new Map<string, Record<string, unknown>>();
-  const commentUpserts: Array<Record<string, unknown>> = [];
-
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - 90);
-
-  for (const r of rows) {
-    const commentId = pickStr(r, "id", "_id", "commentId");
-    const postObj = (r.post as Record<string, unknown> | undefined) ?? {};
-    const postId = pickStr(r, "postId", "post_id") ?? pickStr(postObj, "id", "_id");
-    const createdAtStr = pickStr(r, "createdAt", "created_at", "timestamp");
-    if (!commentId || !postId) continue;
-
-    commentUpserts.push({
-      id: commentId,
-      user_id: userId,
-      post_id: postId,
-      author_username: pickStr(r, "authorUsername", "author_username", "username")
-        ?? pickStr((r.author as Record<string, unknown>) ?? {}, "username"),
-      author_id: pickStr(r, "authorId", "author_id")
-        ?? pickStr((r.author as Record<string, unknown>) ?? {}, "id", "_id"),
-      text: pickStr(r, "text", "message", "body") ?? "",
-      created_at: createdAtStr ?? null,
-      like_count: pickNum(r, "likeCount", "likes"),
-      is_reply: Boolean(r.isReply ?? r.is_reply ?? r.parentCommentId),
-      parent_comment_id: pickStr(r, "parentCommentId", "parent_comment_id"),
-      raw: r,
-      fetched_at: new Date().toISOString(),
-    });
-
-    // Aggregate a post shell from what we see
-    const existing = postsMap.get(postId) ?? {};
-    postsMap.set(postId, {
-      ...existing,
-      id: postId,
-      user_id: userId,
-      post_type: pickStr(postObj, "type", "mediaType") ?? existing.post_type ?? null,
-      caption: pickStr(postObj, "caption", "text") ?? existing.caption ?? null,
-      permalink: pickStr(postObj, "permalink", "url") ?? existing.permalink ?? null,
-      thumbnail_url: pickStr(postObj, "thumbnailUrl", "thumbnail_url", "coverUrl")
-        ?? existing.thumbnail_url ?? null,
-      media_url: pickStr(postObj, "mediaUrl", "media_url") ?? existing.media_url ?? null,
-      published_at: pickStr(postObj, "publishedAt", "published_at", "timestamp")
-        ?? existing.published_at ?? null,
-      likes: pickNum(postObj, "likes", "likeCount") ?? existing.likes ?? null,
-      comments_count: pickNum(postObj, "commentsCount", "comments") ?? existing.comments_count ?? null,
-      shares: pickNum(postObj, "shares") ?? existing.shares ?? null,
-      saves: pickNum(postObj, "saves") ?? existing.saves ?? null,
-      views: pickNum(postObj, "views") ?? existing.views ?? null,
-      impressions: pickNum(postObj, "impressions") ?? existing.impressions ?? null,
-      reach: pickNum(postObj, "reach") ?? existing.reach ?? null,
-      interactions: pickNum(postObj, "interactions") ?? existing.interactions ?? null,
-      engagement_rate: pickNum(postObj, "engagementRate", "engagement_rate")
-        ?? existing.engagement_rate ?? null,
-      raw: { ...(existing.raw as Record<string, unknown> ?? {}), ...postObj },
-      updated_at: new Date().toISOString(),
-    });
+  // Comments for the 20 most recent posts
+  const recent = [...postUpserts].sort((x, y) => String(y.published_at).localeCompare(String(x.published_at))).slice(0, 20);
+  const commentUpserts: Obj[] = [];
+  for (const p of recent) {
+    try {
+      const list = asArr(asObj(await zernio.getPostComments(p.id, accountId)).comments);
+      const push = (c: Obj, parent: string | null) => {
+        const cid = pickStr(c, "id");
+        if (!cid) return;
+        const from = asObj(c.from);
+        commentUpserts.push({
+          id: cid, user_id: userId, post_id: p.id,
+          author_username: pickStr(from, "username"), author_id: pickStr(from, "id"),
+          text: pickStr(c, "message", "text") ?? "",
+          created_at: pickStr(c, "createdTime"),
+          like_count: pickNum(c, "likeCount"),
+          is_reply: parent !== null, parent_comment_id: parent,
+          raw: c, fetched_at: now(),
+        });
+        for (const r of asArr(c.replies)) push(r, cid);
+      };
+      for (const c of list) push(c, null);
+    } catch (err) {
+      console.warn("[refresh] comments failed for", p.id, err);
+    }
   }
-
-  if (postsMap.size > 0) {
-    await sb.from("posts").upsert(Array.from(postsMap.values()), {
-      onConflict: "user_id,id",
-    });
-  }
-  if (commentUpserts.length > 0) {
-    await sb.from("comments").upsert(commentUpserts, { onConflict: "user_id,id" });
-  }
-  // Retention: 90 days for comments
-  await sb
-    .from("comments")
-    .delete()
-    .eq("user_id", userId)
-    .lt("created_at", cutoff.toISOString());
-
-  return { posts: postsMap.size, comments: commentUpserts.length };
+  if (commentUpserts.length) await must(sb.from("comments").upsert(commentUpserts, { onConflict: "user_id,id" }), "comments");
+  return postUpserts.length;
 }
 
 // ---------- Conversations + messages (DMs) ----------

@@ -7,4 +7,4 @@
 - [x] Add functional revenue tracking
 - [x] Add CSV reports
 - [x] Add persistent settings
-- [ ] Validate authenticated desktop and mobile flows
+- [x] Validate authenticated desktop and mobile flows

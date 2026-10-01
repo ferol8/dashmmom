@@ -129,6 +129,11 @@ export const zernio = {
 
   getUsageStats: () => zernioGet<unknown>("/usage-stats"),
 
+  listPosts: (accountId: string, limit = 100) =>
+    zernioGet<unknown>("/analytics", {
+      query: { platform: "instagram", accountId, limit },
+    }),
+
   getAccountInsights: (accountId: string) =>
     zernioGet<unknown>("/analytics/instagram/account-insights", {
       query: { accountId },
